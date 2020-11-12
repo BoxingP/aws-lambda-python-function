@@ -1,11 +1,12 @@
 # -*- encoding:utf-8 -*-
 import datetime
 import time
-
 import boto3
+import yaml
+import collections
 
-tag_key = 'schedule'
-tag_value = 'yes'
+from policy import policy
+
 ec2_client = boto3.client('ec2')
 rds_client = boto3.client('rds')
 dry_run = False
@@ -104,14 +105,20 @@ def stop_instances(ec2_list, rds_list):
         stop_rds_instance(rds)
 
 
-def get_ec2_instances_by_tag(key, value):
+def get_tags_to_filter():
+    with open('tags_filter.yml', 'r') as tags_file:
+        tags = yaml.load(tags_file, Loader=yaml.FullLoader)
+    return tags['aws_tags']
+
+
+def get_ec2_instances_by_tag(tags):
+    custom_filter = []
+    for tag in tags:
+        for key, value in tag.items():
+            custom_filter.append({'Name': 'tag:' + key, 'Values': [value]}.copy())
+
     response = ec2_client.describe_instances(
-        Filters=[
-            {
-                'Name': 'tag:' + key,
-                'Values': [value]
-            }
-        ]
+        Filters=custom_filter
     )
 
     ec2_to_operate = []
@@ -122,15 +129,19 @@ def get_ec2_instances_by_tag(key, value):
     return ec2_to_operate
 
 
-def get_rds_instances_by_tag(key, value):
+def get_rds_instances_by_tag(tags):
     response = rds_client.describe_db_instances()
     rds_to_operate = []
-    for instance in response['DBInstances']:
-        for tag in instance['TagList']:
-            if tag['Key'] == key and tag['Value'] == value:
-                rds_to_operate.append(instance['DBInstanceIdentifier'])
-        else:
-            continue
+
+    for tag in tags:
+        for key, value in tag.items():
+            for instance in response['DBInstances']:
+                for rds_tag in instance['TagList']:
+                    if rds_tag['Key'] == key and rds_tag['Value'] == value:
+                        rds_to_operate.append(instance['DBInstanceIdentifier'])
+                else:
+                    continue
+    rds_to_operate = [item for item, count in collections.Counter(rds_to_operate).items() if count == len(tags)]
     return rds_to_operate
 
 
@@ -180,17 +191,10 @@ def stop_rds_instance(rds):
     )
 
 
-def policy():
-    china_now = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
-    if china_now.time() <= datetime.time(12, 00):
-        return True
-    else:
-        return False
-
-
 def lambda_handler(event, context):
-    ec2_list = get_ec2_instances_by_tag(tag_key, tag_value)
-    rds_list = get_rds_instances_by_tag(tag_key, tag_value)
+    tags = get_tags_to_filter()
+    ec2_list = get_ec2_instances_by_tag(tags)
+    rds_list = get_rds_instances_by_tag(tags)
 
     if policy():
         start_instances(ec2_list, rds_list)
