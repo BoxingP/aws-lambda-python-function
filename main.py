@@ -106,7 +106,7 @@ def stop_instances(ec2_list, rds_list):
 
 
 def get_tags_to_filter():
-    with open('tags_filter.yml', 'r') as tags_file:
+    with open('tags_filter.yaml', 'r') as tags_file:
         tags = yaml.load(tags_file, Loader=yaml.FullLoader)
     return tags['aws_tags']
 
