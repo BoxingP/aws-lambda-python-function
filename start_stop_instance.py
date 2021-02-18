@@ -22,20 +22,11 @@ def check_instance_status(service, instance):
         return ''
 
 
-def remove_running(service, instances):
-    instances_to_operate = instances
+def remove_instance(service, instances, statuses):
+    instances_to_operate = []
     for instance in instances:
-        if check_instance_status(service, instance) in ['running', 'available']:
-            instances_to_operate.remove(instance)
-
-    return instances_to_operate
-
-
-def remove_stopped(service, instances):
-    instances_to_operate = instances
-    for instance in instances:
-        if check_instance_status(service, instance) in ['stopping', 'stopped']:
-            instances_to_operate.remove(instance)
+        if not check_instance_status(service, instance) in statuses:
+            instances_to_operate.append(instance)
 
     return instances_to_operate
 
@@ -105,7 +96,7 @@ def instances_are_off(service, instances):
 
 def start_instances(service, instances):
     print('Starting the {} instances...'.format(service))
-    instances = remove_running(service, instances)
+    instances = remove_instance(service, instances, ['running', 'available'])
     print(','.join(instances))
     for instance in instances:
         start_instance(service, instance)
@@ -115,7 +106,7 @@ def start_instances(service, instances):
 
 def stop_instances(service, instances):
     print('Stopping the {} instances...'.format(service))
-    instances = remove_stopped('ec2', instances)
+    instances = remove_instance(service, instances, ['stopping', 'stopped'])
     print(','.join(instances))
     for instance in instances:
         stop_instance(service, instance)
